@@ -4,7 +4,6 @@ using Helper;
 using IOCContainer;
 using Ninject;
 using Ninject.Modules;
-using System.Reflection;
 using System.ServiceProcess;
 
 namespace ReportProcessor

@@ -75,11 +75,11 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Business\BusinessLayer.csproj">
+    <ProjectReference Include="..\BusinessLayer\BusinessLayer.csproj">
       <Project>{4e5db953-4381-40cc-a459-e5b12a2ae43e}</Project>
       <Name>BusinessLayer</Name>
     </ProjectReference>
-    <ProjectReference Include="..\Common\Helper.csproj">
+    <ProjectReference Include="..\Helper\Helper.csproj">
       <Project>{52e63211-3b7e-4814-8799-1d51b71b4c32}</Project>
       <Name>Helper</Name>
     </ProjectReference>
@@ -91,7 +91,7 @@
       <Project>{d19d508a-462c-4124-bca9-45af772ce847}</Project>
       <Name>Models</Name>
     </ProjectReference>
-    <ProjectReference Include="..\SimpleInjector\IOCContainer.csproj">
+    <ProjectReference Include="..\IOCContainer\IOCContainer.csproj">
       <Project>{e3944ec5-84ce-47e6-a931-c82ceb27573c}</Project>
       <Name>IOCContainer</Name>
     </ProjectReference>

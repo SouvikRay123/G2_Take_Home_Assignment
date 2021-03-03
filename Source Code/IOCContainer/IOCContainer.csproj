@@ -51,7 +51,7 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Business\BusinessLayer.csproj">
+    <ProjectReference Include="..\BusinessLayer\BusinessLayer.csproj">
       <Project>{4e5db953-4381-40cc-a459-e5b12a2ae43e}</Project>
       <Name>BusinessLayer</Name>
     </ProjectReference>
