@@ -1,4 +1,5 @@
-﻿using DataLayer.Common;
+﻿using Constants;
+using DataLayer.Common;
 using Helper;
 using Models;
 using System;
@@ -20,15 +21,14 @@ namespace DataLayer
 
                     List<APIConfiguration> configurations = new List<APIConfiguration>();
 
-                    SqlCommand command = new SqlCommand($@"INSERT INTO Report(id, type, start_date, end_date, status, result) 
-                                                           VALUES NEWID(), '{item.type}', '{item.start_date}', '{item.end_date}', '{item.status}', '{item.result}'", connection);
+                    SqlCommand command = new SqlCommand($@"INSERT INTO reports(id, type, start_date, end_date, status, result) 
+                                                           VALUES (NEWID(), '{item.type}', '{item.start_date}', '{item.end_date}', '{item.status}', '{item.result}')", connection);
 
                     Logger.Debug($"Rows affected : {command.ExecuteNonQuery()}");
                 }
                 catch (System.Exception ex)
                 {
                     Logger.Error(ex);
-                    throw;
                 }
                 finally
                 {
@@ -38,12 +38,7 @@ namespace DataLayer
             }
         }
 
-        public void Delete(string itemIdentifier)
-        {
-            throw new System.InvalidOperationException("Not allowed to delete report");
-        }
-
-        public List<Report> Get(string itemIdentifierName, string identifierValue)
+        public string GetReportId(string type, DateTime startDate, DateTime endDate)
         {
             using (SqlConnection connection = DatabaseHelper.GetG2IntegrationConnectionString())
             {
@@ -52,29 +47,15 @@ namespace DataLayer
                     connection.Open();
                     Logger.Debug("Connection opened");
 
-                    List<Report> reports = new List<Report>();
-
-                    SqlCommand command = new SqlCommand($"SELECT id, type, start_date, end_date, status, result FROM report WHERE {itemIdentifierName} = '{identifierValue}'", connection);
+                    SqlCommand command = new SqlCommand($"SELECT id FROM reports WHERE type = '{type}' AND start_date = '{startDate.ToString(ReportDataTypeConstants.DATE_FORMAT)}' AND end_date = '{endDate.ToString(ReportDataTypeConstants.DATE_FORMAT)}' AND status = '{ReportStatusConstants.IN_PROGRESS}'", connection);
 
                     using (SqlDataReader reader = command.ExecuteReader())
                     {
-                        while (reader.Read())
-                        {
-                            Report configuration = new Report
-                            {
-                                id              = Convert.ToString(reader.GetValue(0)),
-                                type            = Convert.ToString(reader.GetValue(1)),
-                                start_date      = Convert.ToDateTime(reader.GetValue(2).ToString()),
-                                end_date        = Convert.ToDateTime(reader.GetValue(3).ToString()),
-                                status          = Convert.ToString(reader.GetValue(4)),
-                                result          = Convert.ToString(reader.GetValue(4)),
-                            };
-
-                            reports.Add(configuration);
-                        }
+                        if (reader.Read())
+                            return Convert.ToString(reader.GetValue(0));
+                        else
+                            return string.Empty;
                     }
-
-                    return reports;
                 }
                 catch (System.Exception ex)
                 {
@@ -101,10 +82,9 @@ namespace DataLayer
 
                     List<APIConfiguration> configurations = new List<APIConfiguration>();
 
-                    SqlCommand command = new SqlCommand($@"UPDATE Report
-                                                           SET type = '{item.type}', start_date = '{item.start_date}',
-                                                           end_date = {item.end_date}, status = '{item.status}', result = '{item.result}'
-                                                           WHERE id = {item.id}", connection);
+                    SqlCommand command = new SqlCommand($@"UPDATE reports
+                                                           SET status = '{item.status}', result = '{item.result}'
+                                                           WHERE id = '{item.id}'", connection);
 
                     Logger.Debug($"Rows affected : {command.ExecuteNonQuery()}");
                 }

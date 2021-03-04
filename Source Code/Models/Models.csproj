@@ -45,6 +45,10 @@
     <Compile Include="ZoomHistory.cs" />
     <Compile Include="APIConfiguration.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ZoomMetricsResponse.cs" />
+    <Compile Include="ZoomOptimizationDetails.cs" />
+    <Compile Include="ZoomPlansUsage.cs" />
+    <Compile Include="ZoomUsageReport.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

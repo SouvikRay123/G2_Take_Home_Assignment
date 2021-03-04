@@ -3,6 +3,7 @@ using Helper;
 using Models;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 
 namespace DataLayer
@@ -18,28 +19,17 @@ namespace DataLayer
                     connection.Open();
                     Logger.Debug("Connection opened");
 
-                    List<APIConfiguration> configurations = new List<APIConfiguration>();
-
                     SqlCommand command = new SqlCommand($"SELECT id, name, credentials_type, credentials, base_url FROM api_configurations WHERE {itemIdentifierName} = '{identifierValue}'", connection);
 
-                    using (SqlDataReader reader = command.ExecuteReader())
+                    DataSet apiConfigurationDataSet = new DataSet();
+
+                    using (SqlDataAdapter apiConfigurationDataAdapter = new SqlDataAdapter())
                     {
-                        while (reader.Read())
-                        {
-                            APIConfiguration configuration = new APIConfiguration
-                            {
-                                id               = Convert.ToString(reader.GetValue(0)),
-                                name             = Convert.ToString(reader.GetValue(1)),
-                                credentials_type = Convert.ToString(reader.GetValue(2)),
-                                credentials      = Convert.ToString(reader.GetValue(3)),
-                                base_url         = Convert.ToString(reader.GetValue(4))
-                            };
+                        apiConfigurationDataAdapter.SelectCommand = command;
+                        apiConfigurationDataAdapter.Fill(apiConfigurationDataSet);
+                    };
 
-                            configurations.Add(configuration);
-                        }
-                    }
-
-                    return configurations;
+                    return APIConfiguration.Get(apiConfigurationDataSet);
                 }
                 catch (System.Exception ex)
                 {
@@ -52,21 +42,6 @@ namespace DataLayer
                     Logger.Debug("Connection closed");
                 }
             }
-        }
-
-        public void Create(APIConfiguration item)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public void Delete(string itemIdentifier)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public void Update(APIConfiguration item)
-        {
-            throw new System.NotImplementedException();
         }
     }
 }

@@ -1,5 +1,4 @@
 ﻿using BusinessLayer;
-using Constants;
 using Helper;
 using IOCContainer;
 using Ninject;
@@ -20,9 +19,11 @@ namespace ReportProcessor
 
         protected override void OnStart(string[] args)
         {
-            IAPIConfigurationManager configurationManager = ninjectKernel.Get<IAPIConfigurationManager>();
-            var Config = configurationManager.Get(ProductConstants.Zoom);
+            var zoomReportGenerator = ninjectKernel.Get<IZoomUsageReportGenerator>();
+            zoomReportGenerator.Generate90DayUsageReport();
 
+            var zoomOptimizationReportGenerator = ninjectKernel.Get<IZoomOptimizationReportGenerator>();
+            zoomOptimizationReportGenerator.GenerateOptimizationReport();
         }
 
         public void OnDebug()

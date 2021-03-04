@@ -23,7 +23,7 @@ namespace ReportProcessor
 
 #if DEBUG
             new Service1().OnDebug();
-            Thread.Sleep(TimeSpan.MaxValue);
+            Thread.Sleep(int.MaxValue);
 #else
             ServiceBase[] ServicesToRun;
             ServicesToRun = new ServiceBase[]

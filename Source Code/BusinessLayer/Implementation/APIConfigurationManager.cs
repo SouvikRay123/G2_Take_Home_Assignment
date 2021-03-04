@@ -17,7 +17,7 @@ namespace BusinessLayer
 
         public APIConfiguration Get(string configurationName)
         {
-            string cacheKey = $"APIConfiguration_{TableConstants.APIConfigurationNameColumn}_{configurationName}";
+            string cacheKey = $"APIConfiguration_{APIConfigurationConstants.API_CONFIGURATION_NAME_COLUMN}_{configurationName}";
             APIConfiguration configuration;
 
             configuration = ApplicationCache.RetrieveFromCache<APIConfiguration>(cacheKey);
@@ -25,12 +25,12 @@ namespace BusinessLayer
             if (configuration != null)
                 return configuration;
             
-            var dataStoreResult = _APIConfigurationRepository.Get(TableConstants.APIConfigurationNameColumn, configurationName);
+            var dataStoreResult = _APIConfigurationRepository.Get(APIConfigurationConstants.API_CONFIGURATION_NAME_COLUMN, configurationName);
 
             if (dataStoreResult == null || dataStoreResult.Count == 0)
                 throw new Exception($"No configurations found for {configurationName}");
 
-            ApplicationCache.AddToCache<APIConfiguration>(cacheKey, dataStoreResult[0]);
+            ApplicationCache.AddToCache(cacheKey, dataStoreResult[0]);
 
             return dataStoreResult[0];
         }

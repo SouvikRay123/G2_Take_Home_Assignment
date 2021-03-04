@@ -9,6 +9,10 @@ namespace IOCContainer
         {
             Bind<IAPIConfigurationManager>().To<APIConfigurationManager>();
             Bind<IAPIConfigurationRepository>().To<APIConfigurationRepository>();
+            Bind<IZoomUsageReportGenerator>().To<ZoomUsageReportGenerator>();
+            Bind<IZoomHistoryRepository>().To<ZoomHistoryRepository>();
+            Bind<IReportRepository>().To<ReportRepository>();
+            Bind<IZoomOptimizationReportGenerator>().To<ZoomOptimizationReportGenerator>();
         }
     }
 }

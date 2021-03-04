@@ -49,11 +49,14 @@
     <Compile Include="Interface\IAPIConfigurationRepository.cs" />
     <Compile Include="Interface\IReportRepository.cs" />
     <Compile Include="Interface\IZoomHistoryRepository.cs" />
-    <Compile Include="Interface\IRepository.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>
+    <ProjectReference Include="..\Constansts\Constants.csproj">
+      <Project>{3997c6ec-a441-4899-b9ee-6d9a7e17f0f5}</Project>
+      <Name>Constants</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Helper\Helper.csproj">
       <Project>{52e63211-3b7e-4814-8799-1d51b71b4c32}</Project>
       <Name>Helper</Name>
