@@ -36,7 +36,7 @@ has_screen_share VARCHAR(5),
 has_recording VARCHAR(5),
 has_sip VARCHAR(5),
 CONSTRAINT pk_zoom_meetings PRIMARY KEY (id),
-CONSTRAINT uq_zoom_meetings_start_date_end_date UNIQUE (end_time, start_time)
+INDEX ix_zoom_meetings_start_date_end_date NONCLUSTERED (end_time, start_time)
 );
 
 -- Create G2 report table
