@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 
 namespace BusinessLayer
@@ -281,21 +282,21 @@ namespace BusinessLayer
             if (lastHistoricalDate.Value > startDate)
                 startDate = lastHistoricalDate.Value;
 
-            var zoomDataFromAPI = FetchDataFromZoomAPI(lastHistoricalDate.Key, startDate, endDate);
+            var dataFromZoomAPI = FetchDataFromZoomAPI(lastHistoricalDate.Key, startDate, endDate);
 
-            if (zoomDataFromAPI != null && zoomDataFromAPI.Count > 0)
+            if (dataFromZoomAPI != null && dataFromZoomAPI.Count > 0)
             {
-                SaveFetchedDataInDataStore(zoomDataFromAPI);
+                SaveFetchedDataInDataStore(dataFromZoomAPI);
 
-                zoomData.AddRange(zoomDataFromAPI);
+                zoomData.AddRange(dataFromZoomAPI);
             }
         }
 
-        private void SaveFetchedDataInDataStore(List<ZoomHistory> zoomDataFromAPI, int retriesLeft = retries)
+        private void SaveFetchedDataInDataStore(List<ZoomHistory> dataFromZoomAPI, int retriesLeft = retries)
         {
             try
             {
-                zoom_history_repository.Create(zoomDataFromAPI);
+                zoom_history_repository.Create(dataFromZoomAPI);
 
                 Logger.Debug("Saved new data in data store");
             }
@@ -306,7 +307,7 @@ namespace BusinessLayer
                 if (retriesLeft > 0)
                 {
                     Thread.Sleep(thread_sleep_in_seconds * 1000);
-                    SaveFetchedDataInDataStore(zoomDataFromAPI, --retriesLeft);
+                    SaveFetchedDataInDataStore(dataFromZoomAPI, --retriesLeft);
                 }
                 else
                     throw;
@@ -317,24 +318,112 @@ namespace BusinessLayer
         {
             var zoomAPIConfiguration = GetAPIConfiguration();
 
-            int batches              = ((endDate.Date - startDate.Date).Days + 1)/ max_days_of_data_to_fetch;
+            int batches         = ((endDate.Date - startDate.Date).Days + 1) / max_days_of_data_to_fetch;
 
-            var dataFromAPI          = new List<ZoomHistory> { };
-            
-            var fromDate             = endDate.AddDays(-max_days_of_data_to_fetch + 1) < startDate ? startDate : endDate.AddDays(-max_days_of_data_to_fetch + 1);
-            var todate               = endDate;
-            
-            var batchIndex           = 0;
+            var dataFromAPI     = new List<ZoomHistory> { };
+
+            var fromDate        = endDate.AddDays(-max_days_of_data_to_fetch + 1) < startDate ? startDate : endDate.AddDays(-max_days_of_data_to_fetch + 1);
+            var todate          = endDate;
+
+            var batchIndex      = 0;
+
+            var headers         = APIHelper.GetHeaders(zoomAPIConfiguration);
+
+            var dataFromZoomAPI = new List<ZoomMetricsResponse> { };
+
+            if (metricType == zoom_metrics_type.zoom_rooms)
+                dataFromZoomAPI = FetchDataFromZoomRoomsAPI(zoomAPIConfiguration, headers, startDate, batches, dataFromAPI, fromDate, todate, batchIndex);
+            else
+            {
+                string baseUrl  = $"{zoomAPIConfiguration.base_url}/metrics/{metricType}?type=past&page_size={page_size}";
+
+                dataFromZoomAPI = FetchDataFromZoomAPI<ZoomMetricsResponse>(baseUrl, metricType, startDate, headers, batches, fromDate, todate, batchIndex);
+            }
+
+            dataFromAPI = ConsolidateDataFromZoomAPI(metricType, dataFromZoomAPI);
+
+            return dataFromAPI;
+        }
+
+        private List<ZoomHistory> ConsolidateDataFromZoomAPI(zoom_metrics_type metricType, List<ZoomMetricsResponse> dataFromZoomAPI)
+        {
+            var consolidatedDataFromZoomAPI = new List<ZoomHistory> { };
+
+            foreach (var data in dataFromZoomAPI)
+            {
+                switch (metricType)
+                {
+                    case zoom_metrics_type.webinars:
+                        if (data.webinars != null && data.webinars.Count > 0)
+                            consolidatedDataFromZoomAPI.AddRange(data.webinars);
+                        break;
+
+                    case zoom_metrics_type.zoom_rooms:
+                        if (data.zoom_rooms != null && data.zoom_rooms.Count > 0)
+                            consolidatedDataFromZoomAPI.AddRange(data.zoom_rooms);
+                        break;
+
+                    case zoom_metrics_type.meetings:
+                    default:
+                        if (data.meetings != null && data.meetings.Count > 0)
+                            consolidatedDataFromZoomAPI.AddRange(data.meetings);
+                        break;
+                }
+            }
+
+            PrepareFinalData(metricType, consolidatedDataFromZoomAPI);
+
+            return consolidatedDataFromZoomAPI;
+        }
+
+        private List<ZoomMetricsResponse> FetchDataFromZoomRoomsAPI(APIConfiguration zoomAPIConfiguration, Dictionary<string, string> headers, DateTime startDate, int batches, List<ZoomHistory> dataFromAPI, DateTime fromDate, DateTime todate, int batchIndex)
+        {
+            var zoomRoomsMetricsList = new List<ZoomMetricsResponse> { };
+
+            var zoomRoomIdsUrl       = $"{zoomAPIConfiguration.base_url}/metrics/zoomrooms?page_size={page_size}";
+                                     
+            var zoomRoomIdsPagedData = FetchDataFromZoomAPI<ZoomRoomIdListResponse>(zoomRoomIdsUrl, headers);
+
+            if (zoomRoomIdsPagedData != null && zoomRoomIdsPagedData.Count > 0)
+            {
+                var zoomRoomsIds = GetAllZoomRoomIds(zoomRoomIdsPagedData);
+
+                foreach (var zoomRoomId in zoomRoomsIds)
+                {
+                    var zoomRoomDetailsUrl = $"{zoomAPIConfiguration.base_url}/metrics/zoomrooms/{zoomRoomId}?page_size={page_size}";
+
+                    var zoomRoomsMetrics   = FetchDataFromZoomAPI<ZoomRoomMeetingDetails>(zoomRoomIdsUrl, headers);
+
+                    zoomRoomsMetricsList.AddRange(zoomRoomsMetrics.Select(x => x.past_meetings).ToList());
+                }
+            }
+
+            return zoomRoomsMetricsList;
+        }
+
+        private static List<string> GetAllZoomRoomIds(List<ZoomRoomIdListResponse> zoomRoomsPagedData)
+        {
+            var zoomRoomsIds = new List<string> { };
+
+            zoomRoomsPagedData.ForEach(x =>
+            {
+                x.zoom_rooms.ForEach(y => zoomRoomsIds.Add(y.id));
+            });
+
+            return zoomRoomsIds;
+        }
+
+        private List<T> FetchDataFromZoomAPI<T>(string baseUrl, zoom_metrics_type metricType, DateTime startDate, Dictionary<string, string> headers, int batches,  DateTime fromDate, DateTime todate, int batchIndex) where T: ZoomResponseBase
+        {
+            var dataFromAPI = new List<T> { };
 
             do
             {
-                var url = $"{zoomAPIConfiguration.base_url}/metrics/{metricType}?type=past&from={fromDate.ToString(ZoomHistoricalDataConstants.DATE_FORMAT)}&to={todate.ToString(ZoomHistoricalDataConstants.DATE_FORMAT)}&page_size={page_size}";
-
-                var headers = APIHelper.GetHeaders(zoomAPIConfiguration);
+                var url = $"{baseUrl}&from={fromDate.ToString(ZoomHistoricalDataConstants.DATE_FORMAT)}&to={todate.ToString(ZoomHistoricalDataConstants.DATE_FORMAT)}";
 
                 Logger.Debug($"Calling API: {url}");
 
-                var pagedDataFromAPI = FetchDataFromZoomAPI(metricType, url, headers);
+                var pagedDataFromAPI = FetchDataFromZoomAPI<T>(url, headers);
 
                 if (pagedDataFromAPI != null)
                     dataFromAPI.AddRange(pagedDataFromAPI);
@@ -372,91 +461,96 @@ namespace BusinessLayer
             }
         }
 
-        private List<ZoomHistory> FetchDataFromZoomAPI(zoom_metrics_type metricType, string url, Dictionary<string, string> headers)
+        private List<T> FetchDataFromZoomAPI<T>(string url, Dictionary<string, string> headers)
         {
             int requestsMade = 0;
             Stopwatch timer  = Stopwatch.StartNew();
 
-            var Data = APICaller.Get<ZoomMetricsResponse>(url, headers, retriesLeft: retries);
+            var data         = APICaller.Get<T>(url, headers, retriesLeft: retries);
 
             requestsMade++;
 
             Logger.Debug($"Fetched data from zoom API: {url}");
 
-            if (Data != null && Data.total_records > 0)
+            if (data != null)
             {
-                while (!string.IsNullOrWhiteSpace(Data.next_page_token))
+                var dataFromZoomAPI = new List<T>
                 {
-                    if (requestsMade == rate_limit && timer.ElapsedMilliseconds < 60 * 1000)
-                    {
-                        Logger.Debug($"Rate limit {rate_limit}, elapsed {timer.ElapsedMilliseconds} milliseconds");
-                        Thread.Sleep((int)(60000 - timer.ElapsedMilliseconds)); // sleep for the time remaining for a minute of time to complete
-                        timer.Restart();
-                        requestsMade = 0;
-                    }
+                    data
+                };
 
-                    var NextPageData = APICaller.Get<ZoomMetricsResponse>($"{url}&next_page_token={Data.next_page_token}", headers, retriesLeft: retries);
+                string nextPageToken = GetNextPageToken(data);
+
+                while (!string.IsNullOrWhiteSpace(nextPageToken))
+                {
+                    requestsMade     = HandleRateLimit(requestsMade, timer);
+
+                    var nextPageData = APICaller.Get<T>($"{url}&next_page_token={nextPageToken}", headers, retriesLeft: retries);
 
                     requestsMade++;
 
-                    UpdateData(metricType, Data, NextPageData);
+                    dataFromZoomAPI.Add(nextPageData);
+
+                    nextPageToken = GetNextPageToken(nextPageData);
                 }
 
-                return GetFinalData(metricType, Data);
+                return dataFromZoomAPI;
             }
+
+            return new List<T> { };
+        }
+
+        private static string GetNextPageToken<T>(T data)
+        {
+            string nextPageToken;
+            if (typeof(T) == typeof(ZoomRoomMeetingDetails))
+                nextPageToken = (data as ZoomRoomMeetingDetails).past_meetings.next_page_token;
             else
-                return null;
+                nextPageToken = (data as ZoomResponseBase).next_page_token;
+            return nextPageToken;
         }
 
-        private void UpdateData(zoom_metrics_type metricType, ZoomMetricsResponse data, ZoomMetricsResponse nextPageData)
+        private static int HandleRateLimit(int requestsMade, Stopwatch timer)
         {
-            data.next_page_token = nextPageData.next_page_token;
-
-            switch (metricType)
+            if (requestsMade == rate_limit && timer.ElapsedMilliseconds < 60 * 1000)
             {
-                case zoom_metrics_type.zoom_rooms:
-                    data.zoom_rooms.AddRange(nextPageData.zoom_rooms);
-                    break;
-                
-                case zoom_metrics_type.webinars:
-                    data.webinars.AddRange(nextPageData.webinars);
-                    break;
-
-                case zoom_metrics_type.meetings:
-                default:
-                    data.meetings.AddRange(nextPageData.meetings);
-                    break;
+                Logger.Debug($"Rate limit {rate_limit}, elapsed {timer.ElapsedMilliseconds} milliseconds");
+                Thread.Sleep((int)(60000 - timer.ElapsedMilliseconds)); // sleep for the time remaining for a minute of time to complete
+                timer.Restart();
+                requestsMade = 0;
             }
+
+            return requestsMade;
         }
 
-        private List<ZoomHistory> GetFinalData(zoom_metrics_type metricType, ZoomMetricsResponse data)
+        private void PrepareFinalData(zoom_metrics_type metricType, List<ZoomHistory> data)
         {
             switch (metricType)
             {
                 case zoom_metrics_type.zoom_rooms:
-                    data.zoom_rooms.ForEach(x =>
+                    data.ForEach(x =>
                     {
                         x.type     = zoom_metrics_type.zoom_rooms.ToString();
                         x.duration = GetFixedTimespanValue(x.duration);
                     });
-                    return data.zoom_rooms;
+                    break;
 
                 case zoom_metrics_type.webinars:
-                    data.webinars.ForEach(x =>
+                    data.ForEach(x =>
                     {
                         x.type     = zoom_metrics_type.webinars.ToString();
                         x.duration = GetFixedTimespanValue(x.duration);
                     });
-                    return data.webinars;
+                    break;
 
                 case zoom_metrics_type.meetings:
                 default:
-                    data.meetings.ForEach(x =>
+                    data.ForEach(x =>
                     {
                         x.type     = zoom_metrics_type.meetings.ToString();
                         x.duration = GetFixedTimespanValue(x.duration);
                     });
-                    return data.meetings;
+                    break;
             }
         }
 
