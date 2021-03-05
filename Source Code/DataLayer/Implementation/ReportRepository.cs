@@ -55,7 +55,7 @@ namespace DataLayer
                         if (reader.Read())
                             return Convert.ToString(reader.GetValue(0));
                         else
-                            return string.Empty;
+                            return "";
                     }
                 }
                 catch (System.Exception ex)

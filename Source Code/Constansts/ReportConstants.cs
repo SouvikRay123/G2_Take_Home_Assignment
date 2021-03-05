@@ -12,6 +12,8 @@
         public const string IN_PROGRESS = "IN_PROGRESS";
 
         public const string SUCCESS     = "SUCCESS";
+
+        public const string ERROR       = "ERROR";
     }
 
     public static class ReportDataTypeConstants

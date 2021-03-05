@@ -47,17 +47,27 @@ namespace BusinessLayer
 
         private void GenerateUsageReport(DateTime startDate, DateTime endDate)
         {
-            Logger.Debug($"Checking for report to be generated between {startDate.ToShortDateString()} and {endDate.ToShortDateString()}");
+            string reportId = "";
 
-            string reportId = report_repository.GetReportId(ReportTypeConstants.ZOOM_USAGE, startDate, endDate);
-
-            if(string.IsNullOrWhiteSpace(reportId))
+            try
             {
-                Logger.Debug("No report id to be processed");
-                return;
-            }
+                Logger.Debug($"Checking for report to be generated between {startDate.ToShortDateString()} and {endDate.ToShortDateString()}");
 
-            ProcessZoomData(reportId, startDate, endDate);
+                reportId = report_repository.GetReportId(ReportTypeConstants.ZOOM_USAGE, startDate, endDate);
+
+                if (string.IsNullOrWhiteSpace(reportId))
+                {
+                    Logger.Debug("No report id to be processed");
+                    return;
+                }
+
+                ProcessZoomData(reportId, startDate, endDate);
+            }
+            catch (Exception ex)
+            {
+                UpdateReportStatus(reportId, ReportStatusConstants.ERROR, JsonConvert.SerializeObject(ex.Message));
+                throw;
+            }
         }
 
         private void ProcessZoomData(string reportId, DateTime startDate, DateTime endDate)
