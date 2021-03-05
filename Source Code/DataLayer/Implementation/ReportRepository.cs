@@ -4,6 +4,7 @@ using Helper;
 using Models;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 
 namespace DataLayer
@@ -56,6 +57,41 @@ namespace DataLayer
                         else
                             return string.Empty;
                     }
+                }
+                catch (System.Exception ex)
+                {
+                    Logger.Error(ex);
+                    throw;
+                }
+                finally
+                {
+                    connection.Close();
+
+                    Logger.Debug("Connection closed");
+                }
+            }
+        }
+
+        public ReportResult GetReportResult(string type, DateTime startDate, DateTime endDate)
+        {
+            using (SqlConnection connection = DatabaseHelper.GetG2IntegrationConnectionString())
+            {
+                try
+                {
+                    connection.Open();
+                    Logger.Debug("Connection opened");
+
+                    SqlCommand command          = new SqlCommand($"SELECT status, result FROM reports WHERE type = '{type}' AND start_date = '{startDate.ToString(ReportDataTypeConstants.DATE_FORMAT)}' AND end_date = '{endDate.ToString(ReportDataTypeConstants.DATE_FORMAT)}'", connection);
+
+                    DataSet ReportResultDataSet = new DataSet();
+
+                    using (SqlDataAdapter apiConfigurationDataAdapter = new SqlDataAdapter())
+                    {
+                        apiConfigurationDataAdapter.SelectCommand = command;
+                        apiConfigurationDataAdapter.Fill(ReportResultDataSet);
+                    }
+
+                    return ReportResult.Get(ReportResultDataSet);
                 }
                 catch (System.Exception ex)
                 {

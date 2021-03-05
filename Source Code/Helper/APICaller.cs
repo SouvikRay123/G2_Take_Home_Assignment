@@ -15,11 +15,13 @@ namespace Helper
             webRequest.ContentType = contentType;
             AttachHeaders(webRequest, headers);
 
-            using (var reader = new StreamReader(webRequest.GetResponse().GetResponseStream()))
+            using (var response      = (HttpWebResponse)webRequest.GetResponse())
+            using (var receiveStream = response.GetResponseStream())
+            using (var reader        = new StreamReader(receiveStream))
             {
                 return Newtonsoft.Json.JsonConvert.DeserializeObject<T>(reader.ReadToEnd());
             }
-        }
+    }
 
         private static void AttachHeaders(WebRequest webRequest, Dictionary<string, string> headers)
         {
