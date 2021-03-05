@@ -1,21 +1,6 @@
 # G2_Take_Home_Assignment
 
-Problem statement:
-Your business stakeholder has tasked you and your team with building an application (a reporting
-app) that works off the Zoom API. The requirement is for you to present Zoom usage data over the
-last 90 days. You need to do this in such a way that the reporting application auto-updates
-everyday with Zoom usage over a rolling 90 day window. Along with the usage your stakeholder
-would also want a report about the opportunities where spend can be optimized on Zoom licenses.
-
-THE ASK:
-Based on this requirement, design a schema with appropriate simple visualizations. What factors
-will you take into account when designing this integration?
-
-BONUS QUESTIONS
-1.How would you go about generalising your solution in a way where it could be applicable to
-another API?
-2. How would you design this to be as plug & play as possible for an end-user?
-3. How would you design this application to be as robust as possible?
+Propose a solution for a stakeholder who wants to view their Zoom usage and optimization reports for the last 90 days and 60 days respectively.
 
 Solution:
 1. For usage report:
