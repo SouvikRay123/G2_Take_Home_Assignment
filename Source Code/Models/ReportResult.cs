@@ -25,7 +25,7 @@ namespace Models
                 }
             }
 
-            return null;
+            return new ReportResult { result = "", status = "NO_DATA_FOUND" };
         }
     }
 }
