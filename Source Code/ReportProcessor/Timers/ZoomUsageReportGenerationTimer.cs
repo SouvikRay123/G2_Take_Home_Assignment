@@ -8,7 +8,7 @@ namespace ReportProcessor
     {
         IZoomUsageReportGenerator zoom_usage_report_generator;
         const int timer_interval = 5 * 60 * 1000;
-        bool can_stop_service = true;
+        bool can_stop_service    = true;
 
         readonly Timer usage_report_generation_timer = new Timer();
 

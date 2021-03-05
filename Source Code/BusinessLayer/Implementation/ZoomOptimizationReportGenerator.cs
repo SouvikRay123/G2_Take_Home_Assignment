@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace BusinessLayer
 {
@@ -15,6 +16,8 @@ namespace BusinessLayer
         IZoomHistoryRepository zoom_history_repository;
         IAPIConfigurationManager api_configuration_manager;
         int interval_For_Optimization_Report = 30;
+        const int retries                    = 10;
+        const int thread_sleep_in_seconds    = 5;
 
         public ZoomOptimizationReportGenerator(IReportRepository reportRepository, IZoomHistoryRepository zoomHistoryRepository, IAPIConfigurationManager apiConfigurationManager)
         {
@@ -48,15 +51,35 @@ namespace BusinessLayer
         {
             Logger.Debug($"Checking for report to be generated between {startDate.ToShortDateString()} and {endDate.ToShortDateString()}");
 
-            string reportId = report_repository.GetReportId(ReportTypeConstants.ZOOM_OPTIMIZATION, startDate, endDate);
+            string reportId = GetZoomOptimizationReportId(startDate, endDate);
 
-            if(string.IsNullOrWhiteSpace(reportId))
+            if (string.IsNullOrWhiteSpace(reportId))
             {
                 Logger.Debug("No report id to be processed");
                 return;
             }
 
             ProcessOptimizationReport(reportId, startDate, endDate);
+        }
+
+        private string GetZoomOptimizationReportId(DateTime startDate, DateTime endDate, int retriesLeft = retries)
+        {
+            try
+            {
+                return report_repository.GetReportId(ReportTypeConstants.ZOOM_OPTIMIZATION, startDate, endDate);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while fetching zoom optimization report id, retriesLeft: {retriesLeft}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    return GetZoomOptimizationReportId(startDate, endDate, --retriesLeft);
+                }
+                else
+                    throw;
+            }
         }
 
         private void ProcessOptimizationReport(string reportId, DateTime startDate, DateTime endDate)
@@ -80,7 +103,7 @@ namespace BusinessLayer
 
         private ZoomPlansUsage GetZoomPlansUsage()
         {
-            var zoomAPIConfiguration = api_configuration_manager.Get(APIConfigurationConstants.ZOOM_CONFIGURATION_VALUE);
+            var zoomAPIConfiguration = GetAPIConfiguration();
 
             var url                  = $"{zoomAPIConfiguration.base_url}/accounts/me/plans/usage";
                                      
@@ -88,14 +111,54 @@ namespace BusinessLayer
 
             Logger.Debug($"Calling API: {url}");
 
-            return APICaller.Get<ZoomPlansUsage>(url, headers);
+            return APICaller.Get<ZoomPlansUsage>(url, headers, retriesLeft: retries);
+        }
+
+        private APIConfiguration GetAPIConfiguration(int retriesLeft = retries)
+        {
+            try
+            {
+                return api_configuration_manager.Get(APIConfigurationConstants.ZOOM_CONFIGURATION_VALUE);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while fetching zoom api configuration, retriesLeft: {retriesLeft}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    return GetAPIConfiguration(--retriesLeft);
+                }
+                else
+                    throw;
+            }
         }
 
         private Dictionary<string, ZoomOptimizationDetails> ProcessOptimizationReport(ZoomPlansUsage zoomPlansUsage, DateTime startDate, DateTime endDate)
         {
-            var historicalUsageData = zoom_history_repository.Get(startDate, endDate);
+            var historicalUsageData = GetZoomHistoricalData(startDate, endDate);
 
             return ProcessOptimizationReport(zoomPlansUsage, historicalUsageData);
+        }
+
+        private List<ZoomHistory> GetZoomHistoricalData(DateTime startDate, DateTime endDate, int retriesLeft = retries)
+        {
+            try
+            {
+                return zoom_history_repository.Get(startDate, endDate);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while fetching zoom historical data, retriesLeft: {retriesLeft}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    return GetZoomHistoricalData(startDate, endDate, --retriesLeft);
+                }
+                else
+                    throw;
+            }
         }
 
         private Dictionary<string, ZoomOptimizationDetails> ProcessOptimizationReport(ZoomPlansUsage zoomPlansUsage, List<ZoomHistory> historicalUsageData)
@@ -168,29 +231,59 @@ namespace BusinessLayer
             return zoomPlanUsageDetail.usage - distinctLicensedUsages.Count();
         }
 
-        private void UpdateReportStatus(string reportId, string reportStatus, string reportResult)
+        private void UpdateReportStatus(string reportId, string reportStatus, string reportResult, int retriesLeft = retries)
         {
-            report_repository.Update(new Report
+            try
             {
-                id     = reportId,
-                status = reportStatus,
-                result = reportResult
-            });
+                report_repository.Update(new Report
+                {
+                    id     = reportId,
+                    status = reportStatus,
+                    result = reportResult
+                });
 
-            Logger.Debug("Updated report status");
+                Logger.Debug("Updated report status");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while updating zoom optimization report status, retriesLeft: {retriesLeft}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    UpdateReportStatus(reportId, ReportStatusConstants.SUCCESS, reportResult, --retriesLeft);
+                }
+                else
+                    throw;
+            }
         }
 
-        private void SetupNextReportCycle(DateTime startDate, DateTime endDate)
+        private void SetupNextReportCycle(DateTime startDate, DateTime endDate, int retriesLeft = retries)
         {
-            report_repository.Create(new Report
+            try
             {
-                start_date = startDate.AddDays(interval_For_Optimization_Report),
-                end_date   = endDate.AddDays(interval_For_Optimization_Report),
-                type       = ReportTypeConstants.ZOOM_OPTIMIZATION,
-                status     = ReportStatusConstants.IN_PROGRESS
-            });;
+                report_repository.Create(new Report
+                {
+                    start_date = startDate.AddDays(interval_For_Optimization_Report),
+                    end_date   = endDate.AddDays(interval_For_Optimization_Report),
+                    type       = ReportTypeConstants.ZOOM_OPTIMIZATION,
+                    status     = ReportStatusConstants.IN_PROGRESS
+                });;
 
-            Logger.Debug("Scheduled next report generation");
+                Logger.Debug("Scheduled next report generation");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while setting up next zoom optimization report cycle, retriesLeft: {retriesLeft}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    SetupNextReportCycle(startDate, endDate, --retriesLeft);
+                }
+                else
+                    throw;
+            }
         }
     }
 }

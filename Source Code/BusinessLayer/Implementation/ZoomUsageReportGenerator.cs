@@ -18,6 +18,8 @@ namespace BusinessLayer
         const int page_size                 = 300;
         const int rate_limit                = 10;
         const int max_days_of_data_to_fetch = 30;
+        const int retries                   = 10;
+        const int thread_sleep_in_seconds   = 5;
 
         public ZoomUsageReportGenerator(IReportRepository reportRepository, IZoomHistoryRepository zoomHistoryRepository, IAPIConfigurationManager apiConfigurationManager)
         {
@@ -53,7 +55,7 @@ namespace BusinessLayer
             {
                 Logger.Debug($"Checking for report to be generated between {startDate.ToShortDateString()} and {endDate.ToShortDateString()}");
 
-                reportId = report_repository.GetReportId(ReportTypeConstants.ZOOM_USAGE, startDate, endDate);
+                reportId = GetZoomUsageReportId(startDate, endDate);
 
                 if (string.IsNullOrWhiteSpace(reportId))
                 {
@@ -67,6 +69,26 @@ namespace BusinessLayer
             {
                 UpdateReportStatus(reportId, ReportStatusConstants.ERROR, JsonConvert.SerializeObject(ex.Message));
                 throw;
+            }
+        }
+
+        private string GetZoomUsageReportId(DateTime startDate, DateTime endDate, int retriesLeft = retries)
+        {
+            try
+            {
+                return report_repository.GetReportId(ReportTypeConstants.ZOOM_USAGE, startDate, endDate);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while fetching zoom usage report id, retriesLeft: {retriesLeft}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    return GetZoomUsageReportId(startDate, endDate, --retriesLeft);
+                }
+                else
+                    throw;
             }
         }
 
@@ -87,29 +109,59 @@ namespace BusinessLayer
             SetupNextReportCycle(startDate, endDate);
         }
 
-        private void UpdateReportStatus(string reportId, string reportStatus, string reportResult)
+        private void UpdateReportStatus(string reportId, string reportStatus, string reportResult, int retriesLeft = retries)
         {
-            report_repository.Update(new Report
+            try
             {
-                id     = reportId,
-                status = reportStatus,
-                result = reportResult
-            });
+                report_repository.Update(new Report
+                {
+                    id     = reportId,
+                    status = reportStatus,
+                    result = reportResult
+                });
 
-            Logger.Debug("Updated report status");
+                Logger.Debug("Updated report status");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while updating zoom usage report status, reportId: {reportId}, retriesLeft: {retriesLeft}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    UpdateReportStatus(reportId, ReportStatusConstants.SUCCESS, reportStatus, --retriesLeft);
+                }
+                else
+                    throw;
+            }
         }
 
-        private void SetupNextReportCycle(DateTime startDate, DateTime endDate)
+        private void SetupNextReportCycle(DateTime startDate, DateTime endDate, int retriesLeft = retries)
         {
-            report_repository.Create(new Report
+            try
             {
-                start_date = startDate.AddDays(1),
-                end_date   = endDate.AddDays(1),
-                type       = ReportTypeConstants.ZOOM_USAGE,
-                status     = ReportStatusConstants.IN_PROGRESS
-            });;
+                report_repository.Create(new Report
+                {
+                    start_date = startDate.AddDays(1),
+                    end_date = endDate.AddDays(1),
+                    type = ReportTypeConstants.ZOOM_USAGE,
+                    status = ReportStatusConstants.IN_PROGRESS
+                }); ;
 
-            Logger.Debug("Scheduled next report generation");
+                Logger.Debug("Scheduled next report generation");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while setting next report cycle, startDate: {startDate}, endDate: {endDate}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    SetupNextReportCycle(startDate, endDate, --retriesLeft);
+                }
+                else
+                    throw;
+            }
         }
 
         private Dictionary<zoom_metrics_type, ZoomUsageReport> PrepareReport(List<ZoomHistory> zoomData)
@@ -167,7 +219,7 @@ namespace BusinessLayer
 
         private List<ZoomHistory> GetZoomData(DateTime startDate, DateTime endDate)
         {
-            var zoomData            = zoom_history_repository.Get(startDate, endDate);
+            var zoomData = GetZoomDataFromDataStore(startDate, endDate);
 
             Logger.Debug($"Fetched data from data store, count : {zoomData.Count}");
 
@@ -179,6 +231,26 @@ namespace BusinessLayer
                 UpdateDataFromZoom(keyValuePair, zoomData, startDate, endDate);
 
             return zoomData;
+        }
+
+        private List<ZoomHistory> GetZoomDataFromDataStore(DateTime startDate, DateTime endDate, int retriesLeft = retries)
+        {
+            try
+            {
+                return zoom_history_repository.Get(startDate, endDate);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while fetching zoom data from data store, startDate: {startDate}, endDate: {endDate}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    return GetZoomDataFromDataStore(startDate, endDate, --retriesLeft);
+                }
+                else
+                    throw;
+            }
         }
 
         private Dictionary<zoom_metrics_type, DateTime> GetLastCapturedDataDates(List<ZoomHistory> zoomData)
@@ -219,16 +291,31 @@ namespace BusinessLayer
             }
         }
 
-        private void SaveFetchedDataInDataStore(List<ZoomHistory> zoomDataFromAPI)
+        private void SaveFetchedDataInDataStore(List<ZoomHistory> zoomDataFromAPI, int retriesLeft = retries)
         {
-            zoom_history_repository.Create(zoomDataFromAPI);
+            try
+            {
+                zoom_history_repository.Create(zoomDataFromAPI);
 
-            Logger.Debug("Saved new data in data store");
+                Logger.Debug("Saved new data in data store");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while saving fetched zoom data in data store, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    SaveFetchedDataInDataStore(zoomDataFromAPI, --retriesLeft);
+                }
+                else
+                    throw;
+            }
         }
 
         private List<ZoomHistory> FetchDataFromZoomAPI(zoom_metrics_type metricType, DateTime startDate, DateTime endDate)
         {
-            var zoomAPIConfiguration = api_configuration_manager.Get(APIConfigurationConstants.ZOOM_CONFIGURATION_VALUE);
+            var zoomAPIConfiguration = GetAPIConfiguration();
 
             int batches              = ((endDate.Date - startDate.Date).Days + 1)/ max_days_of_data_to_fetch;
 
@@ -265,12 +352,32 @@ namespace BusinessLayer
             return dataFromAPI;
         }
 
+        private APIConfiguration GetAPIConfiguration(int retriesLeft = retries)
+        {
+            try
+            {
+                return api_configuration_manager.Get(APIConfigurationConstants.ZOOM_CONFIGURATION_VALUE);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error while fetching zoom optimization report id, retriesLeft: {retriesLeft}, error : {JsonConvert.SerializeObject(ex)}");
+
+                if (retriesLeft > 0)
+                {
+                    Thread.Sleep(thread_sleep_in_seconds * 1000);
+                    return GetAPIConfiguration(--retriesLeft);
+                }
+                else
+                    throw;
+            }
+        }
+
         private List<ZoomHistory> FetchDataFromZoomAPI(zoom_metrics_type metricType, string url, Dictionary<string, string> headers)
         {
             int requestsMade = 0;
             Stopwatch timer  = Stopwatch.StartNew();
 
-            var Data = APICaller.Get<ZoomMetricsResponse>(url, headers);
+            var Data = APICaller.Get<ZoomMetricsResponse>(url, headers, retriesLeft: retries);
 
             requestsMade++;
 
@@ -288,7 +395,7 @@ namespace BusinessLayer
                         requestsMade = 0;
                     }
 
-                    var NextPageData = APICaller.Get<ZoomMetricsResponse>($"{url}&next_page_token={Data.next_page_token}", headers);
+                    var NextPageData = APICaller.Get<ZoomMetricsResponse>($"{url}&next_page_token={Data.next_page_token}", headers, retriesLeft: retries);
 
                     requestsMade++;
 

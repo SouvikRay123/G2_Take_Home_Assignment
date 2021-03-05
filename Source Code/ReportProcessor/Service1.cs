@@ -28,7 +28,7 @@ namespace ReportProcessor
             zoom_usage_report_generationTimer.Setup();
 
             zoom_optimization_report_generationTimer = new ZoomOptimizationReportGenerationTimer(ninject_kernel.Get<IZoomOptimizationReportGenerator>());
-            //zoom_optimization_report_generationTimer.Setup();
+            zoom_optimization_report_generationTimer.Setup();
 
             Logger.Debug("Service started");
         }
